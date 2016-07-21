@@ -1,0 +1,103 @@
+---
+title: "Machine Learning Project"
+author: "Carlos Gutierrez Sanchez del Rio"
+date: "18 de julio de 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+The goal of this project is to predict the manner in which a set of participants performed a barbell lifting exercise (correctly and incorrectly in 5 different ways) using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+The "classe" variable is the outcome to predict: 
+
+* A: according to specification
+* B: elbows to the front
+* C: lifting halfway
+* D: lowering halfway
+* E: hips to the front
+
+Given that this is a classification problem we will try different tree models to find the best fit (using rpart, random forest...). The test data file doesn't have a classe column but a problem_id column that is to be predicted according to the model fitted using the training data.
+
+## Download and Clean the Data
+We will first download and clean the data. Missing values are coded as "NA", "#DIV/0!" or "".
+
+```{r, cache=TRUE}
+trainraw <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+
+testraw <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+```
+
+Several columns are full of missing values (not imputable) and others are non-relevant for prediction (e.g. user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window). 
+
+By eliminating these columns we reduce the variables from 160 to 53
+
+No columns were identified as having Near Zero Variance by using the **nearZeroVar(train)** function.
+
+```{r, cache=TRUE}
+# Delete columns with missing values
+train<-trainraw[,colSums(is.na(trainraw)) == 0]
+testfinal <-testraw[,colSums(is.na(testraw)) == 0]
+# Delete first 7 columns
+train   <-train[,-c(1:7)]
+testfinal <-testfinal[,-c(1:7)]
+```
+## Separating the train data into train and validation
+We separate the train data into two groups. The training group will be used to fit the models and the validation group to estimate out-of-sample error:
+
+```{r, cache=TRUE, message=FALSE}
+library(caret)
+set.seed(9)
+inTrain <- createDataPartition(train$classe,p=0.7,list=FALSE)
+training <- train[inTrain,]
+validation <- train[-inTrain,]
+dim(training)
+dim(validation)
+```
+
+## Fitting classification tree models
+We will try fitting two popular classification tree models and compare the accuracy of each one. Even though the number of variables is significant (53) we we have 13737 observations to fit the models (warning: it takes a while!!). 
+
+```{r, cache=TRUE, message=FALSE}
+library(randomForest)
+# Fit randomForest (avoid using the train function for rf, takes too long)
+modelRF <- randomForest(classe ~ ., data = training, importance = TRUE, ntrees = 20)
+
+# Fit classification tree
+modelRpart <- train(classe ~.,data=training,method="rpart")
+
+
+```
+
+We can now compare the results on the training data and the validation data:
+
+```{r, cache=TRUE}
+RF_training <- predict(modelRF, training)
+confusionMatrix(RF_training, training$classe)$overall['Accuracy']
+
+Rpart_training <- predict(modelRpart, training)
+confusionMatrix(Rpart_training, training$classe)$overall['Accuracy']
+
+```
+We see that the Random Forest model, even limiting the number of trees to try, has almost perfect accuracy (under 0.6% error rate), while the classification tree has a low accuracy. We could try further models (Bayes LogitBoost...) but the RandomForest seems to do a good job (no need for a combined model either)
+
+By looking at the confusion matrix we see an almost perfect classification:
+```{r}
+modelRF
+```
+
+
+## Estimate out-of-sample error
+Using the validation data we can estimate the out of sample error (under 0.5%)
+
+```{r, cache=TRUE}
+RF_validation <- predict(modelRF, validation)
+confusionMatrix(RF_validation, validation$classe)$overall['Accuracy']
+
+```
+
+
+
